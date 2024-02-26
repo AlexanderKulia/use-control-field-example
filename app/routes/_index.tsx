@@ -1,5 +1,5 @@
-import { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
+import { ActionFunctionArgs } from "@remix-run/node";
+import { useActionData, useLoaderData } from "@remix-run/react";
 import { withZod } from "@remix-validated-form/with-zod";
 import { useEffect } from "react";
 import { ValidatedForm, useControlField, useField, useIsSubmitting, validationError } from "remix-validated-form";
@@ -9,14 +9,16 @@ import { zfd } from "zod-form-data";
 type InputProps = {
   name: string;
   label: string;
+  value?: string;
+  onChange?: React.ChangeEventHandler<HTMLInputElement>;
 };
 
-export const ValidatedInput = ({ name, label }: InputProps) => {
+export const ValidatedInput = ({ name, label, value, onChange }: InputProps) => {
   const { error, getInputProps } = useField(name);
   return (
     <div>
       <label htmlFor={name}>{label}</label>
-      <input {...getInputProps({ id: name })} />
+      <input {...getInputProps({ id: name, value, onChange })} />
       {error && <span className="my-error-class">{error}</span>}
     </div>
   );
@@ -38,7 +40,7 @@ const schema = z.object({
 const formData = zfd.formData(schema);
 export const validator = withZod(formData);
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
+export const loader = async () => {
   return {
     firstName: "alex",
     lastName: "k",
@@ -48,26 +50,40 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export const action = async ({ request }: ActionFunctionArgs) => {
   const data = await validator.validate(await request.formData());
   if (data.error) return validationError(data.error);
-  return null;
+  return data.data;
 };
 
 const formId = "form";
 
 export default function Demo() {
-  const data = useLoaderData<typeof loader>();
+  const loaderData = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
   const [firstName, setFirstName] = useControlField<string>("firstName", formId);
 
   useEffect(() => {
-    // why is this field undefined, should it not be "alex" as provided to defaultValues?
-    console.log(firstName);
-  }, [firstName]);
+    console.log("first name on first render is", firstName);
+    setFirstName("useEffect");
+    console.log("first name set in use effect is", firstName);
+  }, []);
 
   return (
-    <ValidatedForm id={formId} validator={validator} method="post" defaultValues={data}>
-      <ValidatedInput name="firstName" label="First Name" />
+    <ValidatedForm id={formId} validator={validator} method="post" defaultValues={loaderData}>
+      <ValidatedInput
+        name="firstName"
+        label="First Name"
+        value={firstName}
+        onChange={(e) => setFirstName(e.target.value)}
+      />
       <ValidatedInput name="lastName" label="Last Name" />
-      <pre>{JSON.stringify(data, null, 2)}</pre>
+      <h2>Default values</h2>
+      <pre>{JSON.stringify(loaderData, null, 2)}</pre>
       <SubmitButton />
+      {actionData && (
+        <>
+          <h2>Submitted values</h2>
+          <pre>{JSON.stringify(actionData, null, 2)}</pre>
+        </>
+      )}
     </ValidatedForm>
   );
 }
